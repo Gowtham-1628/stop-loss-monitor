@@ -1,0 +1,17 @@
+[Unit]
+Description=Stop Loss Monitor - Real-time position monitoring
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/stop-loss-monitor
+Environment="PATH=/home/ubuntu/stop-loss-monitor/venv/bin"
+ExecStart=/home/ubuntu/stop-loss-monitor/venv/bin/python monitor.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
