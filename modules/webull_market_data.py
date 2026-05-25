@@ -4,21 +4,30 @@ Fetches real-time quotes and historical bars
 """
 from typing import Optional, Dict, List
 import time
-from datetime import datetime
-import sys
-from pathlib import Path
-
-# Add parent directory to path to import notoken
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from datetime import datetime, timezone
+import http.client
+import json
+import hashlib
+import hmac
+import base64
+import uuid
+import urllib.parse
+import os
+from dotenv import load_dotenv
 
 from config import get_logger, Config
-import notoken
+
+load_dotenv()
 
 logger = get_logger(__name__)
 
 
 class WebullMarketData:
     """Fetch market data from Webull API"""
+    
+    # API endpoints and configuration
+    MARKET_HOST = "api.webull.com"
+    TRADE_HOST = "api.webull.com"
     
     def __init__(self):
         """Initialize Webull API wrapper"""
@@ -33,6 +42,125 @@ class WebullMarketData:
         if elapsed < self.rate_limit_delay:
             time.sleep(self.rate_limit_delay - elapsed)
         self.last_request_time = time.time()
+    
+    def _generate_signature(self, host: str, path: str, query_params: dict, body_string: Optional[str], timestamp: str, nonce: str) -> str:
+        """Generate HMAC-SHA1 signature for Webull API authentication"""
+        signing_headers = {
+            "x-app-key": self.app_key,
+            "x-timestamp": timestamp,
+            "x-signature-algorithm": "HMAC-SHA1",
+            "x-signature-version": "1.0",
+            "x-signature-nonce": nonce,
+            "host": host,
+        }
+
+        all_params = {**query_params, **signing_headers}
+        str1 = "&".join(f"{k}={all_params[k]}" for k in sorted(all_params))
+
+        if body_string:
+            str2 = hashlib.md5(body_string.encode("utf-8")).hexdigest().upper()
+            str3 = f"{path}&{str1}&{str2}"
+        else:
+            str3 = f"{path}&{str1}"
+
+        encoded_string = urllib.parse.quote(str3, safe="")
+        signing_key = f"{self.app_secret}&"
+
+        signature = base64.b64encode(
+            hmac.new(
+                signing_key.encode("utf-8"),
+                encoded_string.encode("utf-8"),
+                hashlib.sha1
+            ).digest()
+        ).decode("utf-8")
+
+        return signature
+    
+    def _build_headers(self, host: str, path: str, query_params: Optional[dict] = None, body_string: Optional[str] = None) -> dict:
+        """Build HTTP headers with Webull API authentication"""
+        query_params = query_params or {}
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        nonce = uuid.uuid4().hex
+        signature = self._generate_signature(host, path, query_params, body_string, timestamp, nonce)
+
+        return {
+            "Accept": "application/json",
+            "x-app-key": self.app_key,
+            "x-timestamp": timestamp,
+            "x-signature": signature,
+            "x-signature-algorithm": "HMAC-SHA1",
+            "x-signature-version": "1.0",
+            "x-signature-nonce": nonce,
+            "x-version": "v2",
+        }
+    
+    def _get_snapshot(self, symbol: str) -> Optional[dict]:
+        """
+        Get snapshot (current market data) for a symbol
+        
+        Args:
+            symbol: Stock symbol
+        
+        Returns:
+            Raw API response dict or None if failed
+        """
+        try:
+            path = "/openapi/market-data/stock/snapshot"
+            query_params = {
+                "symbols": symbol,
+                "category": "US_STOCK",
+                "extend_hour_required": "false",
+                "overnight_required": "false",
+            }
+
+            headers = self._build_headers(self.MARKET_HOST, path, query_params=query_params)
+            query_string = urllib.parse.urlencode(query_params)
+            full_path = f"{path}?{query_string}"
+
+            conn = http.client.HTTPSConnection(self.MARKET_HOST, timeout=10)
+            conn.request("GET", full_path, None, headers)
+            res = conn.getresponse()
+            data = json.loads(res.read().decode("utf-8"))
+
+            return data
+        except Exception as e:
+            logger.error(f"Failed to get snapshot for {symbol}: {e}")
+            return None
+    
+    def _get_historical_bars(self, symbol: str, timespan: str = "D", count: int = 30) -> Optional[list]:
+        """
+        Get historical bars (OHLCV data) for a symbol
+        
+        Args:
+            symbol: Stock symbol
+            timespan: Timeframe - M1, M5, M15, M30, M60, M120, M240, D, W, M, Y
+            count: Number of bars to fetch (max 1200 for most, 1650 for M1)
+        
+        Returns:
+            List of bar data dicts or None if failed
+        """
+        try:
+            path = "/openapi/market-data/stock/bars"
+            query_params = {
+                "symbol": symbol,
+                "category": "US_STOCK",
+                "timespan": timespan,
+                "count": str(count),
+                "real_time_required": "true",
+            }
+
+            headers = self._build_headers(self.MARKET_HOST, path, query_params=query_params)
+            full_path = f"{path}?{urllib.parse.urlencode(query_params)}"
+
+            conn = http.client.HTTPSConnection(self.MARKET_HOST, timeout=10)
+            conn.request("GET", full_path, None, headers)
+            res = conn.getresponse()
+            data = json.loads(res.read().decode("utf-8"))
+
+            return data
+        except Exception as e:
+            logger.error(f"Failed to get historical bars for {symbol}: {e}")
+            return None
     
     def get_current_price(self, symbol: str) -> Optional[float]:
         """
@@ -49,8 +177,8 @@ class WebullMarketData:
             
             logger.debug(f"Fetching current price for {symbol}")
             
-            # Use notoken's get_snapshot function
-            data = notoken.get_snapshot(symbol=symbol)
+            # Fetch snapshot from Webull API
+            data = self._get_snapshot(symbol=symbol)
             
             logger.debug(f"API returned type: {type(data)}, value: {data}")
             
@@ -87,7 +215,7 @@ class WebullMarketData:
             logger.debug(f"Fetching weekly low for {symbol}")
             
             # Fetch 2 weeks: current week + previous week
-            data = notoken.get_historical_bars(
+            data = self._get_historical_bars(
                 symbol=symbol,
                 timespan="W",  # Weekly
                 count=weeks
@@ -134,7 +262,7 @@ class WebullMarketData:
             
             logger.debug(f"Fetching {count} {timespan} bars for {symbol}")
             
-            data = notoken.get_historical_bars(
+            data = self._get_historical_bars(
                 symbol=symbol,
                 timespan=timespan,
                 count=count

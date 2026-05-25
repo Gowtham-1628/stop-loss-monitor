@@ -68,7 +68,7 @@ cd /home/ubuntu/stop-loss-monitor
 
 ```bash
 # On your LOCAL machine, run:
-cd /Users/sai/Documents/Github\ 2/monthly-returns
+cd "/Users/sai/Documents/Github 2/stop-loss-monitor"
 
 # Copy entire project
 scp -i /path/to/your-key.pem -r . ubuntu@YOUR_INSTANCE_IP:/home/ubuntu/stop-loss-monitor/
@@ -78,8 +78,9 @@ scp -i /path/to/your-key.pem -r . ubuntu@YOUR_INSTANCE_IP:/home/ubuntu/stop-loss
 
 ```bash
 # On EC2 instance:
-cd /home/ubuntu/stop-loss-monitor
-git clone https://github.com/YOUR_USERNAME/monthly-returns.git .
+cd /home/ubuntu
+git clone https://github.com/Gowtham-1628/stop-loss-monitor.git
+cd stop-loss-monitor
 ```
 
 ### 3.3 Verify Files Copied

@@ -63,7 +63,6 @@ def check_files_exist():
         ("requirements.txt", "Dependencies file"),
         (".env.example", "Environment template"),
         ("config.py", "Configuration module"),
-        ("notoken.py", "Webull API helper"),
     ]
     
     all_exist = True
@@ -186,36 +185,40 @@ def check_config_import():
         return False
 
 
-def check_notoken_import():
-    """Try to import notoken.py and validate it"""
-    print("\n7️⃣  Webull API Module Check")
+def check_webull_market_data():
+    """Verify WebullMarketData class and its methods"""
+    print("\n7️⃣  Webull Market Data Module Check")
     print("-" * 60)
     
     try:
-        import notoken
-        print(f"   ✓ notoken.py imports successfully")
+        from modules.webull_market_data import WebullMarketData
+        print(f"   ✓ WebullMarketData class imports successfully")
         
-        # Check for required functions
-        required_functions = [
-            "generate_signature",
-            "build_headers",
-            "get_snapshot",
+        # Instantiate the class
+        market_data = WebullMarketData()
+        print(f"   ✓ WebullMarketData instantiates successfully")
+        
+        # Check for required methods
+        required_methods = [
+            "get_current_price",
+            "get_weekly_low",
             "get_historical_bars",
+            "get_market_data",
         ]
         
-        for func_name in required_functions:
-            if hasattr(notoken, func_name):
-                print(f"   ✓ {func_name}() exists")
+        for method_name in required_methods:
+            if hasattr(market_data, method_name):
+                print(f"   ✓ {method_name}() exists")
             else:
-                print(f"   ✗ {func_name}() missing")
+                print(f"   ✗ {method_name}() missing")
         
         return True
     
     except ImportError as e:
-        print(f"   ✗ Failed to import notoken: {e}")
+        print(f"   ✗ Failed to import WebullMarketData: {e}")
         return False
     except Exception as e:
-        print(f"   ✗ notoken.py validation error: {e}")
+        print(f"   ✗ WebullMarketData validation error: {e}")
         return False
 
 
@@ -287,7 +290,7 @@ def main():
         "Folders": check_folders_exist(),
         "Environment File": check_env_file(),
         "Config Module": check_config_import(),
-        "Webull API": check_notoken_import(),
+        "Webull Market Data": check_webull_market_data(),
         "Requirements File": check_requirements_file(),
     }
     
