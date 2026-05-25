@@ -1,0 +1,70 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_DEPLOY_PATH: /home/ubuntu/stop-loss-monitor
+        run: |
+          # Create SSH key file
+          mkdir -p ~/.ssh
+          echo "$EC2_KEY" > ~/.ssh/deploy_key.pem
+          chmod 600 ~/.ssh/deploy_key.pem
+
+          # Add EC2 host to known_hosts
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          # Deploy script
+          ssh -i ~/.ssh/deploy_key.pem "$EC2_USER@$EC2_HOST" << 'EOF'
+            set -e
+            
+            echo "🚀 Starting deployment..."
+            cd ${{ env.EC2_DEPLOY_PATH }}
+            
+            # Pull latest code
+            echo "📥 Pulling latest code from GitHub..."
+            git fetch origin
+            git reset --hard origin/main
+            
+            # Install/update dependencies
+            echo "📦 Installing dependencies..."
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+            
+            # Restart service
+            echo "🔄 Restarting service..."
+            sudo systemctl restart stop-loss-monitor
+            
+            # Verify service is running
+            sleep 2
+            if sudo systemctl is-active --quiet stop-loss-monitor; then
+              echo "✅ Deployment successful - service is running"
+            else
+              echo "❌ Deployment failed - service not running"
+              sudo systemctl status stop-loss-monitor
+              exit 1
+            fi
+          EOF
+
+      - name: Deployment Status
+        if: success()
+        run: echo "✅ Deployment to EC2 completed successfully"
+
+      - name: Deployment Failed
+        if: failure()
+        run: echo "❌ Deployment failed - check logs above"
