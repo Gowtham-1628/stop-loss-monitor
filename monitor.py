@@ -11,7 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from config import Config, get_logger
-from modules import AlertManager
+from modules import AlertManager, HealthCheckServer
 
 logger = get_logger(__name__)
 
@@ -23,6 +23,8 @@ class StopLossMonitor:
         """Initialize monitor"""
         self.scheduler = None
         self.alert_manager = None
+        self.health_server = None
+        self.health_thread = None
         self.tz = pytz.timezone(Config.MARKET_TIMEZONE)
         
         logger.info("=" * 70)
@@ -102,6 +104,10 @@ class StopLossMonitor:
                 f"{summary['at_risk']} at risk | "
                 f"{summary['hit']} hit"
             )
+            
+            # Update health check endpoint
+            if self.health_server:
+                self.health_server.update_status(datetime.now(self.tz), summary)
         
         except Exception as e:
             logger.error(f"Error during check cycle: {e}")
@@ -151,6 +157,14 @@ class StopLossMonitor:
             
             Config.print_config()
             
+            # Initialize health check server
+            try:
+                self.health_server = HealthCheckServer(host="0.0.0.0", port=5000)
+                self.health_thread = self.health_server.start_async(debug=False)
+            except Exception as e:
+                logger.warning(f"Could not start health check server: {e}")
+                logger.warning("Monitor will continue without health endpoint")
+            
             # Initialize alert manager
             if not self.initialize_manager():
                 logger.error("Failed to initialize alert manager")
@@ -160,6 +174,10 @@ class StopLossMonitor:
             if not self.schedule_jobs():
                 logger.error("Failed to schedule jobs")
                 return False
+            
+            # Mark monitor as ready
+            if self.health_server:
+                self.health_server.mark_ready()
             
             # Start scheduler
             self.scheduler.start()
@@ -185,7 +203,8 @@ class StopLossMonitor:
         """Stop the monitor gracefully"""
         if self.scheduler:
             self.scheduler.shutdown()
-            logger.info("✓ Monitor stopped")
+            logger.info("✓ Scheduler stopped")
+        logger.info("✓ Monitor stopped")
 
 
 def main():
