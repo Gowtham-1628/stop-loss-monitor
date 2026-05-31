@@ -4,8 +4,30 @@ Logs all monitoring activities, checks, and alerts
 """
 from pathlib import Path
 import logging
+import time
 from datetime import datetime
+import pytz
 from config import Config
+
+class TimezoneFormatter(logging.Formatter):
+    """Custom formatter that converts timestamps to market timezone"""
+    
+    def __init__(self, fmt=None, datefmt=None, timezone='America/New_York'):
+        super().__init__(fmt, datefmt)
+        self.timezone = pytz.timezone(timezone)
+    
+    def formatTime(self, record, datefmt=None):
+        """Format time in the configured timezone"""
+        dt = datetime.fromtimestamp(record.created, tz=pytz.UTC)
+        dt = dt.astimezone(self.timezone)
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            t = dt.timetuple()
+            s = time.strftime(self.default_time_format, t)
+            if self.default_msec_format:
+                s = self.default_msec_format % (s, record.msecs)
+        return s
 
 def setup_logger(name: str, level=None) -> logging.Logger:
     """
@@ -44,10 +66,11 @@ def setup_logger(name: str, level=None) -> logging.Logger:
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
     
-    # Formatter
-    formatter = logging.Formatter(
+    # Timezone-aware formatter
+    formatter = TimezoneFormatter(
         '[%(asctime)s] [%(levelname)-8s] [%(name)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        timezone=Config.MARKET_TIMEZONE
     )
     
     file_handler.setFormatter(formatter)
