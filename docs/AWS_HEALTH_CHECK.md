@@ -68,6 +68,7 @@ curl http://EC2_PUBLIC_IP:5000/health/ready
 ```
 
 Example:
+
 ```bash
 curl http://54.234.56.78:5000/health
 ```
@@ -152,29 +153,29 @@ spec:
   template:
     spec:
       containers:
-      - name: monitor
-        image: stop-loss-monitor:latest
-        ports:
-        - containerPort: 5000
-          name: health
-        
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 5000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        
-        livenessProbe:
-          httpGet:
-            path: /health/live
-            port: 5000
-          initialDelaySeconds: 60
-          periodSeconds: 30
-          timeoutSeconds: 5
-          failureThreshold: 3
+        - name: monitor
+          image: stop-loss-monitor:latest
+          ports:
+            - containerPort: 5000
+              name: health
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 5000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
 ```
 
 ---
@@ -218,9 +219,10 @@ curl http://localhost:5000/health
 ✅ Health check server runs on port 5000  
 ✅ Binding to `0.0.0.0` makes it externally accessible  
 ✅ AWS security group must allow inbound port 5000  
-✅ Perfect for load balancers, monitoring, and alerting  
+✅ Perfect for load balancers, monitoring, and alerting
 
 **Next Steps:**
+
 1. Update security group to allow port 5000
 2. Deploy monitor to EC2
 3. Test endpoints from your local machine
